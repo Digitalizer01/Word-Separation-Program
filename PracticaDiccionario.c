@@ -13,6 +13,7 @@
 void make_file(const char *name);
 void inicializar_fichero(char letra);
 void leersalida();
+void sacarPalabras(char letra);
 
 char LETRAS_ABECEDARIO[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'};
 int tuberia[2];
@@ -141,7 +142,18 @@ void leersalida()
     {
         if (getpid() == puntero[i].pid)
         {
+            inicializar_fichero(puntero[i].letra);
             puntero[i].salida = 1;
         }
     }
+}
+
+void sacarPalabras(char letra)
+{
+    FILE *fp;
+
+    fp = fopen("/tmp/test.txt", "w+");
+    fprintf(fp, "This is testing for fprintf...\n");
+    fputs("This is testing for fputs...\n", fp);
+    fclose(fp);
 }
