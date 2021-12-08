@@ -11,91 +11,146 @@
 #include <sys/shm.h>
 #include <ctype.h>
 
-void make_file(const char *name);
+// ------------------ FUNCIONES -------------------
+void crear_fichero_vacio(const char *name);
 void inicializar_fichero(char letra);
-void leersalida();
-void sacarPalabras(char letra);
-void replace(char *, char *, char *);
+void separar_por_letras();
+void reemplazar_string(char *, char *, char *);
+void mensaje_finalizar();
+// ------------------------------------------------
 
-char LETRAS_ABECEDARIO[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'};
-int tuberia[2];
+// -------------- VARIABLES GLOBALES --------------
+char LETRAS_ABECEDARIO[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'}; // Array de char con todas las letras del abecedario.
+int tuberia[2];                                                                                                                                                // Tubería con la que se comunicarán padres e hijos.
 
+// Zona de memoria compartida.
 typedef struct
 {
-    int pid;
-    int salida;
-    char letra;
+    int pid;    // Identificador de proceso.
+    int salida; // (0 = el proceso no ha terminado todavía) (1 = el proceso ha terminado)
+    char letra; // Letra asociada al proceso.
 } datos;
 
-datos *puntero;
+datos *puntero; // Puntero a la zona de memoria compartida.
+// ------------------------------------------------
 
 int main(int argc, char const *argv[])
 {
 
-    int estado;
-    int id;
-    int pid;
-    key_t clave;
-    clave = ftok("/bin/ls", 11);
-    id = shmget(clave, sizeof(LETRAS_ABECEDARIO) * sizeof(datos), 0777 | IPC_CREAT); // El dos indica el número de campos del struct
-    puntero = (datos *)shmat(id, (char *)0, 0);
-
-    for (int i = 0; i < sizeof(LETRAS_ABECEDARIO); i++)
+    // Comprobamos si el fichero rae.txt existe o no.
+    FILE *file;
+    if (file = fopen("rae.txt", "r"))
     {
-        puntero[i].pid = 0;
-        puntero[i].salida = 0;
-        puntero[i].letra = LETRAS_ABECEDARIO[i];
-        printf("-----\n");
-        printf("puntero[%d].pid=%d \n", i, puntero[i].pid);
-        printf("puntero[%d].salida=%d \n", i, puntero[i].salida);
-        printf("puntero[%d].letra=%c \n", i, puntero[i].letra);
-        printf("-----\n");
-    }
+        // Existe.
+        fclose(file);
 
-    pipe(tuberia);
+        int estado;
+        int id;
+        int pid;
+        key_t clave;
+        clave = ftok("/bin/ls", 11);
+        id = shmget(clave, sizeof(LETRAS_ABECEDARIO) * sizeof(datos), 0777 | IPC_CREAT); // El dos indica el número de campos del struct
+        puntero = (datos *)shmat(id, (char *)0, 0);
 
-    for (int i = 0; i < sizeof(LETRAS_ABECEDARIO); i++)
-    {
-        pid = fork();
-        if (pid == 0)
+        // Iniciamos la zona de memoria.
+        for (int i = 0; i < sizeof(LETRAS_ABECEDARIO); i++)
         {
-            // Hijo
+            puntero[i].pid = 0;
+            puntero[i].salida = 0;
+            puntero[i].letra = LETRAS_ABECEDARIO[i];
+            printf("-----\n");
+            printf("puntero[%d].pid=%d \n", i, puntero[i].pid);
+            printf("puntero[%d].salida=%d \n", i, puntero[i].salida);
+            printf("puntero[%d].letra=%c \n", i, puntero[i].letra);
+            printf("-----\n");
+        }
 
-            struct sigaction a;
-            a.sa_handler = leersalida;
-            sigemptyset(&a.sa_mask);
-            a.sa_flags = 0;
-            sigaction(SIGUSR1, &a, NULL);
-            puntero[i].pid = getpid();
-            usleep(500);
+        pipe(tuberia); // Creamos la tubería.
 
-            while (puntero[i].salida == 0)
+        for (int i = 0; i < sizeof(LETRAS_ABECEDARIO); i++)
+        {
+            pid = fork();
+            if (pid == 0)
             {
-                printf("Esperando a que mi padre me diga que finalice %d \n", getpid());
-                sleep(0.5);
+                // ------------------- HIJO --------------------
+
+                // Armado de señal.
+                // Si el hijo recibe la señal SIGUSR1, el hijo escribe en su fichero las palabras que empiecen
+                // por su letra asociada.
+                struct sigaction a;
+                a.sa_handler = separar_por_letras;
+                sigemptyset(&a.sa_mask);
+                a.sa_flags = 0;
+                sigaction(SIGUSR1, &a, NULL);
+                puntero[i].pid = getpid();
+
+                // Armado de señal.
+                // Si el hijo recibe la señal SIGUSR2, el hijo muestra un mensaje indicando que el otro hijo
+                // que ha enviado la señal ha finalizado.
+                struct sigaction b;
+                b.sa_handler = mensaje_finalizar;
+                sigemptyset(&b.sa_mask);
+                b.sa_flags = 0;
+                sigaction(SIGUSR2, &b, NULL);
+                puntero[i].pid = getpid();
+
+                // Mientras el hijo no haya realizado su tarea, salida = 0
+                while (puntero[i].salida == 0)
+                {
+                    printf("Esperando a que mi padre me diga que finalice %d \n", getpid());
+                    sleep(0.5);
+                }
+
+                // El hijo ya ha realizado su tarea. Va a enviarse a los todos los hijos que no han acabado
+                // (excepto a él mismo) un mensaje indicando que ya ha acabado de escribir las palabras.
+                // Envía su propio PID.
+                for (int i = 0; i < sizeof(LETRAS_ABECEDARIO); i++)
+                {
+                    if (puntero[i].pid != getpid() && puntero[i].salida == 0)
+                    {
+                        int pid_hijo_finalizar = getpid();
+                        write(tuberia[1], &pid_hijo_finalizar, sizeof(pid_hijo_finalizar));
+                        kill(puntero[i].pid, SIGUSR2);
+                    }
+                }
+
+                printf("Soy el hijo %d y voy a finalizar mi ejecución. \n", getpid());
+                exit(0);
             }
-            printf("Hijo %d antes de finalizar \n", getpid());
-            exit(0);
         }
-    }
 
-    // Esperamos a que todos los hijos se hayan creado.
-    for (int i = 0; i < sizeof(LETRAS_ABECEDARIO); i++)
-    {
-        while (puntero[i].pid == 0)
+        // ------------------- PADRE -------------------
+
+        // Esperamos a que todos los hijos se hayan creado.
+        for (int i = 0; i < sizeof(LETRAS_ABECEDARIO); i++)
         {
-            usleep(200);
+            while (puntero[i].pid == 0)
+            {
+                usleep(200);
+            }
         }
-    }
 
-    // Enviamos a los hijos un mensaje indicando que ya pueden comenzar
-    // a hacer sus correspondientes tareas.
-    for (int i = 0; i < sizeof(LETRAS_ABECEDARIO); i++)
+        // Enviamos a los hijos un mensaje indicando que ya pueden comenzar
+        // a hacer sus correspondientes tareas.
+        for (int i = 0; i < sizeof(LETRAS_ABECEDARIO); i++)
+        {
+            int comenzar = 1; // Si vale 1, indica al hijo que puede hacer sus tareas.
+            write(tuberia[1], &comenzar, sizeof(comenzar));
+            kill(puntero[i].pid, SIGUSR1);
+        }
+
+        for (int i = 0; i < sizeof(LETRAS_ABECEDARIO); i++)
+        {
+            wait(&estado);
+        }
+
+        printf("Archivos creados por los hijos: \n");
+        system("ls letras");
+    }
+    else
     {
-        int comenzar = 1; // Si vale 1, indica al hijo que puede hacer sus tareas.
-        write(tuberia[1], &comenzar, sizeof(comenzar));
-        kill(puntero[i].pid, SIGUSR1);
-        sleep(0.3);
+        // No existe.
+        printf("El fichero que contiene el diccionario de la RAE no existe. Por favor, introdúzcalo con el nombre rae.txt\n");
     }
 
     return 0;
@@ -110,7 +165,7 @@ int main(int argc, char const *argv[])
 // -------------------------------------------------
 // -------------------------------------------------
 
-void make_file(const char *name)
+void crear_fichero_vacio(const char *name)
 {
     // Creamos el directorio letras
     char dest[] = "mkdir -p letras";
@@ -139,10 +194,10 @@ void inicializar_fichero(char letra)
     //string always ends with a null character
 
     //displaying the string
-    make_file(str);
+    crear_fichero_vacio(str);
 }
 
-void leersalida()
+void separar_por_letras()
 {
     int v;
     read(tuberia[0], &v, sizeof(v));
@@ -163,29 +218,29 @@ void leersalida()
 
             while (fgets(buffer, bufferLength, filePointer))
             {
-                replace(buffer, "á", "a");
-                replace(buffer, "é", "e");
-                replace(buffer, "í", "i");
-                replace(buffer, "ó", "o");
-                replace(buffer, "ú", "u");
+                reemplazar_string(buffer, "á", "a");
+                reemplazar_string(buffer, "é", "e");
+                reemplazar_string(buffer, "í", "i");
+                reemplazar_string(buffer, "ó", "o");
+                reemplazar_string(buffer, "ú", "u");
 
-                replace(buffer, "Á", "a");
-                replace(buffer, "É", "e");
-                replace(buffer, "Í", "i");
-                replace(buffer, "Ó", "o");
-                replace(buffer, "Ú", "u");
+                reemplazar_string(buffer, "Á", "a");
+                reemplazar_string(buffer, "É", "e");
+                reemplazar_string(buffer, "Í", "i");
+                reemplazar_string(buffer, "Ó", "o");
+                reemplazar_string(buffer, "Ú", "u");
 
-                replace(buffer, "ä", "a");
-                replace(buffer, "ë", "e");
-                replace(buffer, "ï", "i");
-                replace(buffer, "ö", "o");
-                replace(buffer, "ü", "u");
+                reemplazar_string(buffer, "ä", "a");
+                reemplazar_string(buffer, "ë", "e");
+                reemplazar_string(buffer, "ï", "i");
+                reemplazar_string(buffer, "ö", "o");
+                reemplazar_string(buffer, "ü", "u");
 
-                replace(buffer, "Ä", "a");
-                replace(buffer, "Ë", "e");
-                replace(buffer, "Ï", "i");
-                replace(buffer, "Ö", "o");
-                replace(buffer, "Ü", "u");
+                reemplazar_string(buffer, "Ä", "a");
+                reemplazar_string(buffer, "Ë", "e");
+                reemplazar_string(buffer, "Ï", "i");
+                reemplazar_string(buffer, "Ö", "o");
+                reemplazar_string(buffer, "Ü", "u");
 
                 for (int j = 0; buffer[j]; j++)
                 {
@@ -222,19 +277,9 @@ void leersalida()
     }
 }
 
-void sacarPalabras(char letra)
+void reemplazar_string(char *o_string, char *s_string, char *r_string)
 {
-    FILE *fp;
-
-    fp = fopen("/tmp/test.txt", "w+");
-    fprintf(fp, "This is testing for fprintf...\n");
-    fputs("This is testing for fputs...\n", fp);
-    fclose(fp);
-}
-
-void replace(char *o_string, char *s_string, char *r_string)
-{
-    //a buffer variable to do all replace things
+    //a buffer variable to do all reemplazar_string things
     char buffer[500];
     //to store the pointer returned from strstr
     char *ch;
@@ -255,7 +300,14 @@ void replace(char *o_string, char *s_string, char *r_string)
     //empty o_string for copying
     o_string[0] = 0;
     strcpy(o_string, buffer);
-    //pass recursively to replace other occurrences
+    //pass recursively to reemplazar_string other occurrences
 
-    return replace(o_string, s_string, r_string);
+    return reemplazar_string(o_string, s_string, r_string);
+}
+
+void mensaje_finalizar()
+{
+    int pid_hijo_finaliza;
+    read(tuberia[0], &pid_hijo_finaliza, sizeof(pid_hijo_finaliza));
+    printf("Soy el proceso %d y el proceso hijo %d ya ha terminado \n", getpid(), pid_hijo_finaliza);
 }
