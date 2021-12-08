@@ -11,11 +11,32 @@
 #include <sys/shm.h>
 #include <ctype.h>
 
-// ------------------ FUNCIONES -------------------
+// ----------- DECLARACIÓN DE FUNCIONES -----------
+
+// Inicializa los ficheros de los hijos. Sigue el siguiente formato:
+// Letra_LETRAHIJO.txt
+// Siendo LETRAHIJO la letra, en minúscula, asociada al hijo. Dicha
+// letra viene dada por el parámetro name
 void crear_fichero_vacio(const char *name);
+
+// Genera el string que se pasará por parámetro a la función
+// crear_fichero_vacio.
 void inicializar_fichero(char letra);
+
+// Función que guarda las palabras que comienzan por la letra asociada a un
+// hijo en el fichero que le corresponda. Las palabras son tomadas del
+// fichero rae.txt
 void separar_por_letras();
-void reemplazar_string(char *, char *, char *);
+
+// Función que reemplaza un substring por otro en un texto dado.
+// Parámetros:
+// string_original: string base
+// substring_original: substring que queremos que sea sustituido y se encuentra en string_original
+// substring_nuevo: substring que queremos que aparezca en string_original donde estuviera substring_original
+void reemplazasubstring_nuevo(char *, char *, char *);
+
+// Función que muestra el mensaje que un hijo ha enviado a otro hijo para indicar
+// que ha finalizado.
 void mensaje_finalizar();
 // ------------------------------------------------
 
@@ -44,6 +65,7 @@ int main(int argc, char const *argv[])
         // Existe.
         fclose(file);
 
+        // Variables de las zonas de memoria y sobre los procesos.
         int estado;
         int id;
         int pid;
@@ -51,6 +73,8 @@ int main(int argc, char const *argv[])
         clave = ftok("/bin/ls", 11);
         id = shmget(clave, sizeof(LETRAS_ABECEDARIO) * sizeof(datos), 0777 | IPC_CREAT); // El dos indica el número de campos del struct
         puntero = (datos *)shmat(id, (char *)0, 0);
+
+        printf("Comenzamos el programa.\n");
 
         // Iniciamos la zona de memoria.
         for (int i = 0; i < sizeof(LETRAS_ABECEDARIO); i++)
@@ -77,21 +101,21 @@ int main(int argc, char const *argv[])
                 // Armado de señal.
                 // Si el hijo recibe la señal SIGUSR1, el hijo escribe en su fichero las palabras que empiecen
                 // por su letra asociada.
-                struct sigaction a;
-                a.sa_handler = separar_por_letras;
-                sigemptyset(&a.sa_mask);
-                a.sa_flags = 0;
-                sigaction(SIGUSR1, &a, NULL);
+                struct sigaction senal_separar;
+                senal_separar.sa_handler = separar_por_letras;
+                sigemptyset(&senal_separar.sa_mask);
+                senal_separar.sa_flags = 0;
+                sigaction(SIGUSR1, &senal_separar, NULL);
                 puntero[i].pid = getpid();
 
                 // Armado de señal.
                 // Si el hijo recibe la señal SIGUSR2, el hijo muestra un mensaje indicando que el otro hijo
                 // que ha enviado la señal ha finalizado.
-                struct sigaction b;
-                b.sa_handler = mensaje_finalizar;
-                sigemptyset(&b.sa_mask);
-                b.sa_flags = 0;
-                sigaction(SIGUSR2, &b, NULL);
+                struct sigaction senal_finalizar_comunicar;
+                senal_finalizar_comunicar.sa_handler = mensaje_finalizar;
+                sigemptyset(&senal_finalizar_comunicar.sa_mask);
+                senal_finalizar_comunicar.sa_flags = 0;
+                sigaction(SIGUSR2, &senal_finalizar_comunicar, NULL);
                 puntero[i].pid = getpid();
 
                 // Mientras el hijo no haya realizado su tarea, salida = 0
@@ -139,11 +163,13 @@ int main(int argc, char const *argv[])
             kill(puntero[i].pid, SIGUSR1);
         }
 
+        // Esperamos a que todos los hijos hayan finalizado.
         for (int i = 0; i < sizeof(LETRAS_ABECEDARIO); i++)
         {
             wait(&estado);
         }
 
+        // Mostramos todos los ficheros que han creado los hijos.
         printf("Archivos creados por los hijos: \n");
         system("ls letras");
     }
@@ -156,15 +182,12 @@ int main(int argc, char const *argv[])
     return 0;
 }
 
-// -------------------------------------------------
-// -------------------------------------------------
-// -------------------------------------------------
-// -------------------------------------------------
-// -------------------------------------------------
-// -------------------------------------------------
-// -------------------------------------------------
-// -------------------------------------------------
+// ------------------- FUNCIONES ------------------
 
+// Inicializa los ficheros de los hijos. Sigue el siguiente formato:
+// Letra_LETRAHIJO.txt
+// Siendo LETRAHIJO la letra, en minúscula, asociada al hijo. Dicha
+// letra viene dada por el parámetro name
 void crear_fichero_vacio(const char *name)
 {
     // Creamos el directorio letras
@@ -178,25 +201,29 @@ void crear_fichero_vacio(const char *name)
     strcat(nombre_fichero, extension);
     system(nombre_fichero);
 
+    // Hacemos que el fichero esté vacío. Esto sirve para que,
+    // en caso de que existiera, no se escriba en la última línea del fichero.
     char comando[] = "cat /dev/null > letras/Letra_";
     strcat(comando, name);
     strcat(comando, extension);
     system(comando);
 }
 
+// Genera el string que se pasará por parámetro a la función
+// crear_fichero_vacio.
 void inicializar_fichero(char letra)
 {
     char str[2];
 
-    // string is a character array
     str[0] = letra;
     str[1] = '\0';
-    //string always ends with a null character
 
-    //displaying the string
     crear_fichero_vacio(str);
 }
 
+// Función que guarda las palabras que comienzan por la letra asociada a un
+// hijo en el fichero que le corresponda. Las palabras son tomadas del
+// fichero rae.txt
 void separar_por_letras()
 {
     int v;
@@ -218,30 +245,34 @@ void separar_por_letras()
 
             while (fgets(buffer, bufferLength, filePointer))
             {
-                reemplazar_string(buffer, "á", "a");
-                reemplazar_string(buffer, "é", "e");
-                reemplazar_string(buffer, "í", "i");
-                reemplazar_string(buffer, "ó", "o");
-                reemplazar_string(buffer, "ú", "u");
+                // Reemplazamos todas las vocales no comunes
+                // por sus equivalentes "normales" en minúscula.
 
-                reemplazar_string(buffer, "Á", "a");
-                reemplazar_string(buffer, "É", "e");
-                reemplazar_string(buffer, "Í", "i");
-                reemplazar_string(buffer, "Ó", "o");
-                reemplazar_string(buffer, "Ú", "u");
+                reemplazasubstring_nuevo(buffer, "á", "a");
+                reemplazasubstring_nuevo(buffer, "é", "e");
+                reemplazasubstring_nuevo(buffer, "í", "i");
+                reemplazasubstring_nuevo(buffer, "ó", "o");
+                reemplazasubstring_nuevo(buffer, "ú", "u");
 
-                reemplazar_string(buffer, "ä", "a");
-                reemplazar_string(buffer, "ë", "e");
-                reemplazar_string(buffer, "ï", "i");
-                reemplazar_string(buffer, "ö", "o");
-                reemplazar_string(buffer, "ü", "u");
+                reemplazasubstring_nuevo(buffer, "Á", "a");
+                reemplazasubstring_nuevo(buffer, "É", "e");
+                reemplazasubstring_nuevo(buffer, "Í", "i");
+                reemplazasubstring_nuevo(buffer, "Ó", "o");
+                reemplazasubstring_nuevo(buffer, "Ú", "u");
 
-                reemplazar_string(buffer, "Ä", "a");
-                reemplazar_string(buffer, "Ë", "e");
-                reemplazar_string(buffer, "Ï", "i");
-                reemplazar_string(buffer, "Ö", "o");
-                reemplazar_string(buffer, "Ü", "u");
+                reemplazasubstring_nuevo(buffer, "ä", "a");
+                reemplazasubstring_nuevo(buffer, "ë", "e");
+                reemplazasubstring_nuevo(buffer, "ï", "i");
+                reemplazasubstring_nuevo(buffer, "ö", "o");
+                reemplazasubstring_nuevo(buffer, "ü", "u");
 
+                reemplazasubstring_nuevo(buffer, "Ä", "a");
+                reemplazasubstring_nuevo(buffer, "Ë", "e");
+                reemplazasubstring_nuevo(buffer, "Ï", "i");
+                reemplazasubstring_nuevo(buffer, "Ö", "o");
+                reemplazasubstring_nuevo(buffer, "Ü", "u");
+
+                // Ponemos todas las consonantes en minúscula.
                 for (int j = 0; buffer[j]; j++)
                 {
                     buffer[j] = tolower(buffer[j]);
@@ -252,9 +283,13 @@ void separar_por_letras()
                 {
                     for (int z = 0; z < sizeof(LETRAS_ABECEDARIO); z++)
                     {
+                        // Comprobamos que la letra actual pertenece al abecedario.
+                        // Si no pertenece, pasamos a la siguiente.
                         if (buffer[w] == LETRAS_ABECEDARIO[z])
                         {
                             enc = 1;
+                            // Si la letra coincide con la del hijo, escribe
+                            // la palabra en el fichero. Si no, pasa a la siguiente palabra.
                             if (buffer[w] == puntero[i].letra)
                             {
                                 FILE *fichero_letra;
@@ -277,37 +312,35 @@ void separar_por_letras()
     }
 }
 
-void reemplazar_string(char *o_string, char *s_string, char *r_string)
+// Función que reemplaza un substring por otro en un texto dado.
+// Parámetros:
+// string_original: string base
+// substring_original: substring que queremos que sea sustituido y se encuentra en string_original
+// substring_nuevo: substring que queremos que aparezca en string_original donde estuviera substring_original
+void reemplazasubstring_nuevo(char *string_original, char *substring_original, char *substring_nuevo)
 {
-    //a buffer variable to do all reemplazar_string things
     char buffer[500];
-    //to store the pointer returned from strstr
     char *ch;
 
-    //first exit condition
-    if (!(ch = strstr(o_string, s_string)))
+    if (!(ch = strstr(string_original, substring_original)))
         return;
 
-    //copy all the content to buffer before the first occurrence of the search string
-    strncpy(buffer, o_string, ch - o_string);
+    strncpy(buffer, string_original, ch - string_original);
+    buffer[ch - string_original] = 0;
+    sprintf(buffer + (ch - string_original), "%s%s", substring_nuevo, ch + strlen(substring_original));
+    string_original[0] = 0;
+    strcpy(string_original, buffer);
 
-    //prepare the buffer for appending by adding a null to the end of it
-    buffer[ch - o_string] = 0;
-
-    //append using sprintf function
-    sprintf(buffer + (ch - o_string), "%s%s", r_string, ch + strlen(s_string));
-
-    //empty o_string for copying
-    o_string[0] = 0;
-    strcpy(o_string, buffer);
-    //pass recursively to reemplazar_string other occurrences
-
-    return reemplazar_string(o_string, s_string, r_string);
+    return reemplazasubstring_nuevo(string_original, substring_original, substring_nuevo);
 }
 
+// Función que muestra el mensaje que un hijo ha enviado a otro hijo para indicar
+// que ha finalizado.
 void mensaje_finalizar()
 {
     int pid_hijo_finaliza;
     read(tuberia[0], &pid_hijo_finaliza, sizeof(pid_hijo_finaliza));
     printf("Soy el proceso %d y el proceso hijo %d ya ha terminado \n", getpid(), pid_hijo_finaliza);
 }
+
+// ------------------------------------------------
