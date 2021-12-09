@@ -239,65 +239,65 @@ void separar_por_letras()
 
             FILE *filePointer;
             int bufferLength = 255;
-            char buffer[bufferLength];
+            char palabra[bufferLength];
 
             filePointer = fopen("rae.txt", "r");
 
-            while (fgets(buffer, bufferLength, filePointer))
+            while (fgets(palabra, bufferLength, filePointer))
             {
                 // Reemplazamos todas las vocales no comunes
                 // por sus equivalentes "normales" en minúscula.
 
-                reemplazasubstring_nuevo(buffer, "á", "a");
-                reemplazasubstring_nuevo(buffer, "é", "e");
-                reemplazasubstring_nuevo(buffer, "í", "i");
-                reemplazasubstring_nuevo(buffer, "ó", "o");
-                reemplazasubstring_nuevo(buffer, "ú", "u");
+                reemplazasubstring_nuevo(palabra, "á", "a");
+                reemplazasubstring_nuevo(palabra, "é", "e");
+                reemplazasubstring_nuevo(palabra, "í", "i");
+                reemplazasubstring_nuevo(palabra, "ó", "o");
+                reemplazasubstring_nuevo(palabra, "ú", "u");
 
-                reemplazasubstring_nuevo(buffer, "Á", "a");
-                reemplazasubstring_nuevo(buffer, "É", "e");
-                reemplazasubstring_nuevo(buffer, "Í", "i");
-                reemplazasubstring_nuevo(buffer, "Ó", "o");
-                reemplazasubstring_nuevo(buffer, "Ú", "u");
+                reemplazasubstring_nuevo(palabra, "Á", "a");
+                reemplazasubstring_nuevo(palabra, "É", "e");
+                reemplazasubstring_nuevo(palabra, "Í", "i");
+                reemplazasubstring_nuevo(palabra, "Ó", "o");
+                reemplazasubstring_nuevo(palabra, "Ú", "u");
 
-                reemplazasubstring_nuevo(buffer, "ä", "a");
-                reemplazasubstring_nuevo(buffer, "ë", "e");
-                reemplazasubstring_nuevo(buffer, "ï", "i");
-                reemplazasubstring_nuevo(buffer, "ö", "o");
-                reemplazasubstring_nuevo(buffer, "ü", "u");
+                reemplazasubstring_nuevo(palabra, "ä", "a");
+                reemplazasubstring_nuevo(palabra, "ë", "e");
+                reemplazasubstring_nuevo(palabra, "ï", "i");
+                reemplazasubstring_nuevo(palabra, "ö", "o");
+                reemplazasubstring_nuevo(palabra, "ü", "u");
 
-                reemplazasubstring_nuevo(buffer, "Ä", "a");
-                reemplazasubstring_nuevo(buffer, "Ë", "e");
-                reemplazasubstring_nuevo(buffer, "Ï", "i");
-                reemplazasubstring_nuevo(buffer, "Ö", "o");
-                reemplazasubstring_nuevo(buffer, "Ü", "u");
+                reemplazasubstring_nuevo(palabra, "Ä", "a");
+                reemplazasubstring_nuevo(palabra, "Ë", "e");
+                reemplazasubstring_nuevo(palabra, "Ï", "i");
+                reemplazasubstring_nuevo(palabra, "Ö", "o");
+                reemplazasubstring_nuevo(palabra, "Ü", "u");
 
                 // Ponemos todas las consonantes en minúscula.
-                for (int j = 0; buffer[j]; j++)
+                for (int j = 0; palabra[j]; j++)
                 {
-                    buffer[j] = tolower(buffer[j]);
+                    palabra[j] = tolower(palabra[j]);
                 }
 
                 int enc = 0;
-                for (int w = 0; w < sizeof(buffer) && enc == 0; w++)
+                for (int w = 0; w < sizeof(palabra) && enc == 0; w++)
                 {
                     for (int z = 0; z < sizeof(LETRAS_ABECEDARIO); z++)
                     {
                         // Comprobamos que la letra actual pertenece al abecedario.
                         // Si no pertenece, pasamos a la siguiente.
-                        if (buffer[w] == LETRAS_ABECEDARIO[z])
+                        if (palabra[w] == LETRAS_ABECEDARIO[z])
                         {
                             enc = 1;
                             // Si la letra coincide con la del hijo, escribe
                             // la palabra en el fichero. Si no, pasa a la siguiente palabra.
-                            if (buffer[w] == puntero[i].letra)
+                            if (palabra[w] == puntero[i].letra)
                             {
                                 FILE *fichero_letra;
                                 char nombre_fichero[200];
 
                                 sprintf(nombre_fichero, "letras/Letra_%c.txt", puntero[i].letra);
                                 fichero_letra = fopen(nombre_fichero, "a");
-                                fputs(buffer, fichero_letra);
+                                fputs(palabra, fichero_letra);
                                 fclose(fichero_letra);
                             }
                         }
@@ -319,17 +319,17 @@ void separar_por_letras()
 // substring_nuevo: substring que queremos que aparezca en string_original donde estuviera substring_original
 void reemplazasubstring_nuevo(char *string_original, char *substring_original, char *substring_nuevo)
 {
-    char buffer[500];
+    char palabra[500];
     char *ch;
 
     if (!(ch = strstr(string_original, substring_original)))
         return;
 
-    strncpy(buffer, string_original, ch - string_original);
-    buffer[ch - string_original] = 0;
-    sprintf(buffer + (ch - string_original), "%s%s", substring_nuevo, ch + strlen(substring_original));
+    strncpy(palabra, string_original, ch - string_original);
+    palabra[ch - string_original] = 0;
+    sprintf(palabra + (ch - string_original), "%s%s", substring_nuevo, ch + strlen(substring_original));
     string_original[0] = 0;
-    strcpy(string_original, buffer);
+    strcpy(string_original, palabra);
 
     return reemplazasubstring_nuevo(string_original, substring_original, substring_nuevo);
 }
