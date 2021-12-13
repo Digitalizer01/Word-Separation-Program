@@ -122,7 +122,7 @@ int main(int argc, char const *argv[])
                 while (puntero[i].salida == 0)
                 {
                     printf("Esperando a que mi padre me diga que finalice %d \n", getpid());
-                    sleep(0.5);
+                    usleep(150);
                 }
 
                 // El hijo ya ha realizado su tarea. Va a enviarse a los todos los hijos que no han acabado
