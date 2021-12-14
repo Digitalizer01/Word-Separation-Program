@@ -23,10 +23,9 @@ void crear_fichero_vacio(const char *name);
 // crear_fichero_vacio.
 void inicializar_fichero(char letra);
 
-// Función que guarda las palabras que comienzan por la letra asociada a un
-// hijo en el fichero que le corresponda. Las palabras son tomadas del
-// fichero rae.txt
-void separar_por_letras();
+// Función que pone el campo terminar_hijo de la zona de memoria compartida del hijo a 1,
+// lo que indica que el hijo ha terminado de realizar su tarea.
+void proceso_hijo_terminar();
 
 // Función que reemplaza un substring por otro en un texto dado.
 // Parámetros:
@@ -47,9 +46,9 @@ int tuberia[2];                                                                 
 // Zona de memoria compartida.
 typedef struct
 {
-    int pid;    // Identificador de proceso.
-    int salida; // (0 = el proceso no ha terminado todavía) (1 = el proceso ha terminado)
-    char letra; // Letra asociada al proceso.
+    int pid;           // Identificador de proceso.
+    int terminar_hijo; // (0 = el proceso no ha terminado todavía) (1 = el proceso ha terminado)
+    char letra;        // Letra asociada al proceso.
 } datos;
 
 datos *puntero; // Puntero a la zona de memoria compartida.
@@ -80,11 +79,11 @@ int main(int argc, char const *argv[])
         for (int i = 0; i < sizeof(LETRAS_ABECEDARIO); i++)
         {
             puntero[i].pid = 0;
-            puntero[i].salida = 0;
+            puntero[i].terminar_hijo = 0;
             puntero[i].letra = LETRAS_ABECEDARIO[i];
             printf("-----\n");
             printf("puntero[%d].pid=%d \n", i, puntero[i].pid);
-            printf("puntero[%d].salida=%d \n", i, puntero[i].salida);
+            printf("puntero[%d].terminar_hijo=%d \n", i, puntero[i].terminar_hijo);
             printf("puntero[%d].letra=%c \n", i, puntero[i].letra);
             printf("-----\n");
         }
@@ -96,13 +95,14 @@ int main(int argc, char const *argv[])
             pid = fork();
             if (pid == 0)
             {
+                int ejecutando = 1;
                 // ------------------- HIJO --------------------
 
                 // Armado de señal.
                 // Si el hijo recibe la señal SIGUSR1, el hijo escribe en su fichero las palabras que empiecen
                 // por su letra asociada.
                 struct sigaction senal_separar;
-                senal_separar.sa_handler = separar_por_letras;
+                senal_separar.sa_handler = proceso_hijo_terminar;
                 sigemptyset(&senal_separar.sa_mask);
                 senal_separar.sa_flags = 0;
                 sigaction(SIGUSR1, &senal_separar, NULL);
@@ -118,26 +118,108 @@ int main(int argc, char const *argv[])
                 sigaction(SIGUSR2, &senal_finalizar_comunicar, NULL);
                 puntero[i].pid = getpid();
 
-                // Mientras el hijo no haya realizado su tarea, salida = 0
-                while (puntero[i].salida == 0)
+                if (puntero[i].terminar_hijo == 0)
+                {
+                    inicializar_fichero(puntero[i].letra);
+                }
+
+                // Mientras el hijo no haya realizado su tarea, terminar_hijo = 0
+                while (puntero[i].terminar_hijo == 0)
                 {
                     printf("Esperando a que mi padre me diga que finalice %d \n", getpid());
                     usleep(150);
                 }
+
+                // ----------- TAREA DE SEPARACIÓN -----------
+
+                char cadena[20];
+                sprintf(cadena, "%s/%c.txt", "Letra_", puntero[i].letra);
+
+                FILE *filePointer;
+                int bufferLength = 255;
+                char palabra[bufferLength];
+
+                filePointer = fopen("rae.txt", "r");
+
+                while (fgets(palabra, bufferLength, filePointer))
+                {
+                    // Reemplazamos todas las vocales no comunes
+                    // por sus equivalentes "normales" en minúscula.
+
+                    reemplazasubstring_nuevo(palabra, "á", "a");
+                    reemplazasubstring_nuevo(palabra, "é", "e");
+                    reemplazasubstring_nuevo(palabra, "í", "i");
+                    reemplazasubstring_nuevo(palabra, "ó", "o");
+                    reemplazasubstring_nuevo(palabra, "ú", "u");
+
+                    reemplazasubstring_nuevo(palabra, "Á", "a");
+                    reemplazasubstring_nuevo(palabra, "É", "e");
+                    reemplazasubstring_nuevo(palabra, "Í", "i");
+                    reemplazasubstring_nuevo(palabra, "Ó", "o");
+                    reemplazasubstring_nuevo(palabra, "Ú", "u");
+
+                    reemplazasubstring_nuevo(palabra, "ä", "a");
+                    reemplazasubstring_nuevo(palabra, "ë", "e");
+                    reemplazasubstring_nuevo(palabra, "ï", "i");
+                    reemplazasubstring_nuevo(palabra, "ö", "o");
+                    reemplazasubstring_nuevo(palabra, "ü", "u");
+
+                    reemplazasubstring_nuevo(palabra, "Ä", "a");
+                    reemplazasubstring_nuevo(palabra, "Ë", "e");
+                    reemplazasubstring_nuevo(palabra, "Ï", "i");
+                    reemplazasubstring_nuevo(palabra, "Ö", "o");
+                    reemplazasubstring_nuevo(palabra, "Ü", "u");
+
+                    // Ponemos todas las consonantes en minúscula.
+                    for (int j = 0; palabra[j]; j++)
+                    {
+                        palabra[j] = tolower(palabra[j]);
+                    }
+
+                    int enc = 0;
+                    for (int w = 0; w < sizeof(palabra) && enc == 0; w++)
+                    {
+                        for (int z = 0; z < sizeof(LETRAS_ABECEDARIO); z++)
+                        {
+                            // Comprobamos que la letra actual pertenece al abecedario.
+                            // Si no pertenece, pasamos a la siguiente.
+                            if (palabra[w] == LETRAS_ABECEDARIO[z])
+                            {
+                                enc = 1;
+                                // Si la letra coincide con la del hijo, escribe
+                                // la palabra en el fichero. Si no, pasa a la siguiente palabra.
+                                if (palabra[w] == puntero[i].letra)
+                                {
+                                    FILE *fichero_letra;
+                                    char nombre_fichero[200];
+
+                                    sprintf(nombre_fichero, "letras/Letra_%c.txt", puntero[i].letra);
+                                    fichero_letra = fopen(nombre_fichero, "a");
+                                    fputs(palabra, fichero_letra);
+                                    fclose(fichero_letra);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                fclose(filePointer);
+
+                // -------------------------------------------
 
                 // El hijo ya ha realizado su tarea. Va a enviarse a los todos los hijos que no han acabado
                 // (excepto a él mismo) un mensaje indicando que ya ha acabado de escribir las palabras.
                 // Envía su propio PID.
                 for (int i = 0; i < sizeof(LETRAS_ABECEDARIO); i++)
                 {
-                    if (puntero[i].pid != getpid() && puntero[i].salida == 0)
+                    if (puntero[i].pid != getpid() && ejecutando == 1)
                     {
                         int pid_hijo_finalizar = getpid();
                         write(tuberia[1], &pid_hijo_finalizar, sizeof(pid_hijo_finalizar));
                         kill(puntero[i].pid, SIGUSR2);
                     }
                 }
-
+                ejecutando = 0;
                 printf("Soy el hijo %d y voy a finalizar mi ejecución. \n", getpid());
                 exit(0);
             }
@@ -221,93 +303,18 @@ void inicializar_fichero(char letra)
     crear_fichero_vacio(str);
 }
 
-// Función que guarda las palabras que comienzan por la letra asociada a un
-// hijo en el fichero que le corresponda. Las palabras son tomadas del
-// fichero rae.txt
-void separar_por_letras()
+// Función que pone el campo terminar_hijo de la zona de memoria compartida del hijo a 1,
+// lo que indica que el hijo ha terminado de realizar su tarea.
+void proceso_hijo_terminar()
 {
-    int v;
-    read(tuberia[0], &v, sizeof(v));
-    printf("Leido %d \n", v);
+    int mensaje;
+    read(tuberia[0], &mensaje, sizeof(mensaje));
+    printf("Leido %d \n", mensaje);
     for (int i = 0; i < sizeof(LETRAS_ABECEDARIO); i++)
     {
         if (getpid() == puntero[i].pid)
         {
-            inicializar_fichero(puntero[i].letra);
-            char cadena[20];
-            sprintf(cadena, "%s/%c.txt", "Letra_", puntero[i].letra);
-
-            FILE *filePointer;
-            int bufferLength = 255;
-            char palabra[bufferLength];
-
-            filePointer = fopen("rae.txt", "r");
-
-            while (fgets(palabra, bufferLength, filePointer))
-            {
-                // Reemplazamos todas las vocales no comunes
-                // por sus equivalentes "normales" en minúscula.
-
-                reemplazasubstring_nuevo(palabra, "á", "a");
-                reemplazasubstring_nuevo(palabra, "é", "e");
-                reemplazasubstring_nuevo(palabra, "í", "i");
-                reemplazasubstring_nuevo(palabra, "ó", "o");
-                reemplazasubstring_nuevo(palabra, "ú", "u");
-
-                reemplazasubstring_nuevo(palabra, "Á", "a");
-                reemplazasubstring_nuevo(palabra, "É", "e");
-                reemplazasubstring_nuevo(palabra, "Í", "i");
-                reemplazasubstring_nuevo(palabra, "Ó", "o");
-                reemplazasubstring_nuevo(palabra, "Ú", "u");
-
-                reemplazasubstring_nuevo(palabra, "ä", "a");
-                reemplazasubstring_nuevo(palabra, "ë", "e");
-                reemplazasubstring_nuevo(palabra, "ï", "i");
-                reemplazasubstring_nuevo(palabra, "ö", "o");
-                reemplazasubstring_nuevo(palabra, "ü", "u");
-
-                reemplazasubstring_nuevo(palabra, "Ä", "a");
-                reemplazasubstring_nuevo(palabra, "Ë", "e");
-                reemplazasubstring_nuevo(palabra, "Ï", "i");
-                reemplazasubstring_nuevo(palabra, "Ö", "o");
-                reemplazasubstring_nuevo(palabra, "Ü", "u");
-
-                // Ponemos todas las consonantes en minúscula.
-                for (int j = 0; palabra[j]; j++)
-                {
-                    palabra[j] = tolower(palabra[j]);
-                }
-
-                int enc = 0;
-                for (int w = 0; w < sizeof(palabra) && enc == 0; w++)
-                {
-                    for (int z = 0; z < sizeof(LETRAS_ABECEDARIO); z++)
-                    {
-                        // Comprobamos que la letra actual pertenece al abecedario.
-                        // Si no pertenece, pasamos a la siguiente.
-                        if (palabra[w] == LETRAS_ABECEDARIO[z])
-                        {
-                            enc = 1;
-                            // Si la letra coincide con la del hijo, escribe
-                            // la palabra en el fichero. Si no, pasa a la siguiente palabra.
-                            if (palabra[w] == puntero[i].letra)
-                            {
-                                FILE *fichero_letra;
-                                char nombre_fichero[200];
-
-                                sprintf(nombre_fichero, "letras/Letra_%c.txt", puntero[i].letra);
-                                fichero_letra = fopen(nombre_fichero, "a");
-                                fputs(palabra, fichero_letra);
-                                fclose(fichero_letra);
-                            }
-                        }
-                    }
-                }
-            }
-
-            fclose(filePointer);
-
-            puntero[i].salida = 1;
+            puntero[i].terminar_hijo = 1;
         }
     }
 }
