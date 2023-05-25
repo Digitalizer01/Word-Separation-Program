@@ -9,7 +9,7 @@ The main objective of this project is to demonstrate the mechanisms provided by 
 ### Problem to Solve
 In this project, we will work with a set of words from the Royal Spanish Academy (RAE). The goal is to create multiple synchronized processes that separate words starting with different letters of the Spanish alphabet. You will be provided with a file containing all the RAE words categorized by their starting letter.
 
-The implemented C program creates a process for each letter of the alphabet. Each process is responsible for gathering words corresponding to a specific letter and creating a file named after that letter.
+The implemented C program (written in Spanish) creates a process for each letter of the alphabet. Each process is responsible for gathering words corresponding to a specific letter and creating a file named after that letter.
 
 ### Main Process Tasks:
 - Create child processes. Once all processes are created, send a communication using pipes and signals to indicate that they can start their tasks.
@@ -22,7 +22,7 @@ The implemented C program creates a process for each letter of the alphabet. Eac
 - Upon receiving the notification, each child process will display the following message: "I am process XX, and child process YY has finished."
 
 ### Conclusion
-This project provides an opportunity to explore the foundational concepts of process management and interprocess communication in UNIX systems. By implementing the word separation program, you will gain hands-on experience with creating processes, managing their execution, and establishing communication channels between them.
+This project provides an opportunity to explore the foundational concepts of process management and interprocess communication in UNIX systems. By implementing the word separation program (written in Spanish), you will gain hands-on experience with creating processes, managing their execution, and establishing communication channels between them.
 
 Note: Please ensure that the necessary file containing the RAE words is provided before running the program.
 
